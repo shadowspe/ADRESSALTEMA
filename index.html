@@ -226,7 +226,6 @@
         let ancienEmplacementTrouve = null;
 
         window.onload = function() {
-            // Vérification de la session authentifiée
             if (sessionStorage.getItem('altema_auth') === 'true') {
                 document.getElementById('section-login').classList.add('hidden');
             }
@@ -657,32 +656,53 @@
 
             if (cameraActive) stopCamera();
 
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                alert("⚠️ L'OCR nécessite un accès sécurisé (HTTPS).");
+                return;
+            }
+
             container.classList.remove('hidden');
             const video = document.getElementById('ocrVideo');
             const status = document.getElementById('ocrStatus');
 
             try {
                 status.textContent = "Initialisation de la caméra...";
-                ocrStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" }
-                });
+                
+                const constraints = {
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        advanced: [{ torch: true }]
+                    }
+                };
+
+                ocrStream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = ocrStream;
-                await video.play();
+                
+                video.onloadedmetadata = async () => {
+                    await video.play();
 
-                status.textContent = "Chargement OCR...";
-                if (!ocrWorker) {
-                    ocrWorker = await Tesseract.createWorker('eng');
-                }
+                    const track = ocrStream.getVideoTracks()[0];
+                    if (track && track.getCapabilities().torch) {
+                        try {
+                            await track.applyConstraints({ advanced: [{ torch: true }] });
+                        } catch(e) {}
+                    }
 
-                status.textContent = "Veuillez viser l'étiquette...";
-
-                ocrInterval = setInterval(async () => {
-                    await capturerEtAnalyserOCR();
-                }, 1500);
+                    status.textContent = "Chargement OCR...";
+                    if (!ocrWorker) {
+                        ocrWorker = await Tesseract.createWorker('eng');
+                    }
+                    status.textContent = "Veuillez viser l'étiquette...";
+                    ocrInterval = setInterval(async () => {
+                        await capturerEtAnalyserOCR();
+                    }, 1500);
+                };
 
             } catch (err) {
-                console.error(err);
-                alert("Impossible d'accéder à la caméra pour l'OCR.");
+                console.error("Erreur accès OCR :", err);
+                alert("Accès caméra refusé.");
                 stopOcrCamera();
             }
         }
@@ -749,16 +769,26 @@
 
             stopOcrCamera();
 
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                alert("⚠️ La caméra nécessite un accès sécurisé (HTTPS).");
+                return;
+            }
+
             readerDiv.classList.remove('hidden');
             btn.textContent = "🛑 Fermer la caméra";
             cameraActive = true;
 
             html5QrCode = new Html5Qrcode("reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+            
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 260, height: 160 },
+                aspectRatio: 1.0
+            };
 
             try {
                 await html5QrCode.start(
-                    { facingMode: "environment" }, 
+                    { facingMode: { exact: "environment" } },
                     config, 
                     (decodedText) => {
                         const articleAssocie = articles.find(a => a.ean === decodedText || a.code === decodedText);
@@ -772,10 +802,51 @@
                     (errorMessage) => { }
                 );
 
+                activerFlashAutomatique();
+
             } catch (err) {
-                console.error("Erreur caméra", err);
-                alert("Accès à la caméra refusé ou non disponible.");
-                stopCamera();
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        (decodedText) => {
+                            const articleAssocie = articles.find(a => a.ean === decodedText || a.code === decodedText);
+                            if (articleAssocie) {
+                                attribuerArticle(articleAssocie.code);
+                                stopCamera();
+                            } else {
+                                alert(`Code scanné (${decodedText}) inconnu dans la base articles.`);
+                            }
+                        },
+                        (errorMessage) => { }
+                    );
+
+                    activerFlashAutomatique();
+
+                } catch (errFallback) {
+                    console.error("Erreur caméra :", errFallback);
+                    alert("Erreur accès caméra : Vérifiez les autorisations.");
+                    stopCamera();
+                }
+            }
+        }
+
+        async function activerFlashAutomatique() {
+            try {
+                const videoElement = document.querySelector("#reader video");
+                if (videoElement && videoElement.srcObject) {
+                    const stream = videoElement.srcObject;
+                    const track = stream.getVideoTracks()[0];
+                    const capabilities = track.getCapabilities();
+
+                    if (capabilities.torch) {
+                        await track.applyConstraints({
+                            advanced: [{ torch: true }]
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn("Le flash n'est pas supporté sur cet appareil/navigateur.", e);
             }
         }
 

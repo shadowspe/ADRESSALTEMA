@@ -690,7 +690,7 @@
             }
         });
 
-        // --- DÉCLENCHEMENT DU FOCUS AU TAP / CLIC ---
+        // --- FORCE LA MISE AU POINT LORS D'UN CLIC/TAP ---
         async function declencherTapToFocus(event, stream, container) {
             if (!stream) return;
 
@@ -698,6 +698,7 @@
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
 
+            // Animation visuelle du cercle
             const ring = document.createElement('div');
             ring.className = 'focus-ring';
             ring.style.left = `${x}px`;
@@ -707,18 +708,32 @@
             setTimeout(() => ring.classList.add('active'), 10);
             setTimeout(() => ring.remove(), 500);
 
+            // Tentative de réinitialisation/déclenchement de l'autofocus
             try {
                 const track = stream.getVideoTracks()[0];
                 if (track && typeof track.getCapabilities === 'function') {
                     const capabilities = track.getCapabilities();
-                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+
+                    // 1. Tenter l'API avancée pointOfInterest si supportée
+                    if (capabilities.pointsOfInterest) {
+                        const normX = x / rect.width;
+                        const normY = y / rect.height;
                         await track.applyConstraints({
-                            advanced: [{ focusMode: 'continuous' }]
+                            advanced: [{ pointsOfInterest: [{ x: normX, y: normY }] }]
                         });
+                        return;
+                    }
+
+                    // 2. Astuce pour forcer un balayage d'autofocus matériel
+                    if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
+                        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+                    } else if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                        await track.applyConstraints({ advanced: [{ focusMode: 'none' }] }).catch(() => {});
+                        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
                     }
                 }
             } catch(e) {
-                console.warn("Gestion du focus non supportée :", e);
+                console.warn("L'appareil ou le navigateur ne prend pas en charge le focus manuel :", e);
             }
         }
 

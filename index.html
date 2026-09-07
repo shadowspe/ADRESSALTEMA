@@ -46,7 +46,7 @@
 </head>
 <body class="bg-altema-bgLight text-gray-800 font-sans antialiased min-h-screen flex flex-col relative">
 
-    <!-- ÉCRAN DE CONNEXION (MOT DE PASSE) -->
+    <!-- ÉCRAN DE CONNEXION -->
     <div id="section-login" class="fixed inset-0 bg-altema-dark z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border-t-8 border-altema-yellow space-y-5">
             <div class="text-center space-y-1">
@@ -128,7 +128,6 @@
         <!-- Section 2: Adressage -->
         <section id="section-adressage" class="hidden space-y-4">
             
-            <!-- Sélecteur & Recherche d'emplacement + Scanner OCR d'étiquette -->
             <div class="bg-white p-4 rounded-xl shadow-md space-y-3 border-l-4 border-altema-yellow">
                 <div class="flex justify-between items-center">
                     <label class="block text-xs font-bold uppercase tracking-wider text-gray-500">Emplacement Actuel</label>
@@ -142,7 +141,7 @@
                     <video id="ocrVideo" class="w-full h-48 object-cover rounded cursor-pointer" playsinline></video>
                     <canvas id="ocrCanvas" class="hidden"></canvas>
                     <div id="ocrTargetBox" class="absolute inset-0 m-auto border-2 border-dashed border-altema-yellow w-3/4 h-20 rounded pointer-events-none flex items-center justify-center">
-                        <span class="bg-black/60 text-altema-yellow text-[10px] px-2 py-0.5 rounded">Cadrer l'étiquette ici (Taper pour focus)</span>
+                        <span class="bg-black/60 text-altema-yellow text-[10px] px-2 py-0.5 rounded">Reculer à 30cm & taper pour focus</span>
                     </div>
                     <div id="ocrStatus" class="mt-2 text-center text-xs text-altema-yellow font-mono">Analyse en cours...</div>
                     <div class="flex space-x-2 mt-2">
@@ -151,7 +150,6 @@
                     </div>
                 </div>
 
-                <!-- Recherche & Sélecteur d'emplacement alphanumérique -->
                 <div class="relative space-y-1">
                     <input type="text" id="rechercheEmplacement" placeholder="Tapez ou choisissez un emplacement..." autocomplete="off" onfocus="filtrerEmplacements(true)" oninput="filtrerEmplacements(true)" class="w-full p-3 border-2 border-gray-200 rounded-lg text-lg font-bold text-altema-dark focus:border-altema-yellow focus:outline-none">
                     <div id="listeEmplacementsResultats" class="absolute left-0 right-0 top-full mt-1 max-h-56 overflow-y-auto border-2 border-altema-dark bg-white rounded-lg shadow-xl divide-y z-30 hidden"></div>
@@ -164,7 +162,6 @@
                     </button>
                 </div>
 
-                <!-- Liste des articles assignés à cet emplacement -->
                 <div class="pt-2 border-t border-gray-100">
                     <span class="block text-xs font-bold text-gray-500 mb-1">Articles sur cet emplacement :</span>
                     <div id="listeArticlesEmplacement" class="space-y-1.5 max-h-36 overflow-y-auto pr-1"></div>
@@ -175,7 +172,6 @@
             <div class="bg-white p-4 rounded-xl shadow-md space-y-4 border border-gray-200">
                 <h2 class="font-bold text-altema-dark border-b pb-2">Ajouter un article</h2>
 
-                <!-- Scanner Caméra Code EAN -->
                 <div>
                     <button id="btnToggleCam" onclick="toggleCamera()" class="w-full bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark py-3 rounded-lg font-bold shadow flex items-center justify-center space-x-2 transition">
                         <span>🏷️ Scanner un Code EAN</span>
@@ -184,7 +180,7 @@
                         <button id="btnFlashEan" onclick="toggleFlashEan()" class="bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow">
                             💡 Flash : OFF
                         </button>
-                        <span class="text-[11px] text-gray-500 italic">Appuyez sur la vidéo pour forcer le focus</span>
+                        <span class="text-[11px] text-gray-500 italic">Reculez à 30cm pour un focus net</span>
                     </div>
                     <div id="reader" class="mt-2 overflow-hidden rounded-lg hidden border-2 border-altema-yellow relative cursor-pointer"></div>
                 </div>
@@ -195,11 +191,9 @@
                     <div class="flex-grow border-t border-gray-200"></div>
                 </div>
 
-                <!-- Barre de Recherche Article -->
                 <div class="relative space-y-1">
                     <label class="block text-xs font-semibold text-gray-600">Recherche Article (Code / Désignation / EAN) :</label>
                     <input type="text" id="rechercheArticle" autocomplete="off" placeholder="Tapez le code, le nom ou l'EAN..." oninput="filtrerArticles()" class="w-full p-3 border-2 border-gray-200 rounded-lg text-sm focus:border-altema-dark focus:outline-none">
-                    
                     <div id="listeResultats" class="absolute left-0 right-0 top-full mt-1 max-h-60 overflow-y-auto border-2 border-altema-dark bg-white rounded-lg shadow-xl divide-y z-30 hidden"></div>
                 </div>
             </div>
@@ -207,7 +201,7 @@
         </section>
     </main>
 
-    <!-- POPUP DE CONFIRMATION DÉPLACEMENT -->
+    <!-- POPUP DOUBLON -->
     <div id="modalDoublon" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white rounded-xl shadow-2xl border-t-8 border-altema-yellow max-w-sm w-full p-5 space-y-4">
             <div class="flex items-center space-x-3 text-amber-600">
@@ -690,7 +684,34 @@
             }
         });
 
-        // --- FORCE LA MISE AU POINT LORS D'UN CLIC/TAP ---
+        // --- GESTION OPTIMISÉE DE L'AUTOFOCUS ET DU ZOOM ---
+        async function appliquerFocusEtZoomOptimise(stream) {
+            try {
+                const track = stream.getVideoTracks()[0];
+                if (!track || typeof track.getCapabilities !== 'function') return;
+
+                const capabilities = track.getCapabilities();
+                const constraints = { advanced: [] };
+
+                // 1. Forcer le Focus Continu
+                if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                    constraints.advanced.push({ focusMode: 'continuous' });
+                }
+
+                // 2. Appliquer un Zoom 1.5x par défaut (force à s'éloigner pour une mise au point nette)
+                if (capabilities.zoom) {
+                    const targetZoom = Math.min(1.5, capabilities.zoom.max || 1);
+                    constraints.advanced.push({ zoom: targetZoom });
+                }
+
+                if (constraints.advanced.length > 0) {
+                    await track.applyConstraints(constraints);
+                }
+            } catch (e) {
+                console.warn("Ajustements matériels non supportés par ce périphérique :", e);
+            }
+        }
+
         async function declencherTapToFocus(event, stream, container) {
             if (!stream) return;
 
@@ -698,7 +719,6 @@
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
 
-            // Animation visuelle du cercle
             const ring = document.createElement('div');
             ring.className = 'focus-ring';
             ring.style.left = `${x}px`;
@@ -708,23 +728,18 @@
             setTimeout(() => ring.classList.add('active'), 10);
             setTimeout(() => ring.remove(), 500);
 
-            // Tentative de réinitialisation/déclenchement de l'autofocus
             try {
                 const track = stream.getVideoTracks()[0];
                 if (track && typeof track.getCapabilities === 'function') {
                     const capabilities = track.getCapabilities();
 
-                    // 1. Tenter l'API avancée pointOfInterest si supportée
                     if (capabilities.pointsOfInterest) {
-                        const normX = x / rect.width;
-                        const normY = y / rect.height;
                         await track.applyConstraints({
-                            advanced: [{ pointsOfInterest: [{ x: normX, y: normY }] }]
+                            advanced: [{ pointsOfInterest: [{ x: x / rect.width, y: y / rect.height }] }]
                         });
                         return;
                     }
 
-                    // 2. Astuce pour forcer un balayage d'autofocus matériel
                     if (capabilities.focusMode && capabilities.focusMode.includes('single-shot')) {
                         await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
                     } else if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
@@ -733,11 +748,11 @@
                     }
                 }
             } catch(e) {
-                console.warn("L'appareil ou le navigateur ne prend pas en charge le focus manuel :", e);
+                console.warn("Échec de la mise au point tactile :", e);
             }
         }
 
-        // --- SCANNER OCR POUR LES ÉTIQUETTES D'EMPLACEMENT ---
+        // --- SCANNER OCR ---
         async function toggleOcrCamera() {
             const container = document.getElementById('ocrContainer');
             if (!container.classList.contains('hidden')) {
@@ -748,7 +763,7 @@
             stopCamera();
 
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                alert("⚠️ L'OCR nécessite un accès sécurisé (HTTPS).");
+                alert("⚠️ L'OCR nécessite un accès HTTPS.");
                 return;
             }
 
@@ -759,24 +774,20 @@
             try {
                 status.textContent = "Initialisation de la caméra...";
                 
-                const constraints = {
-                    video: {
-                        facingMode: { ideal: "environment" }
-                    }
-                };
-
-                ocrStream = await navigator.mediaDevices.getUserMedia(constraints);
+                ocrStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } }
+                });
                 video.srcObject = ocrStream;
                 
                 video.onloadedmetadata = async () => {
                     await video.play();
-                    appliquerFocusCourt(ocrStream);
+                    await appliquerFocusEtZoomOptimise(ocrStream);
 
                     status.textContent = "Chargement OCR...";
                     if (!ocrWorker) {
                         ocrWorker = await Tesseract.createWorker('eng');
                     }
-                    status.textContent = "Veuillez viser l'étiquette...";
+                    status.textContent = "Cadrer l'étiquette...";
                     
                     if (ocrInterval) clearInterval(ocrInterval);
                     ocrInterval = setInterval(async () => {
@@ -785,8 +796,8 @@
                 };
 
             } catch (err) {
-                console.error("Erreur accès OCR :", err);
-                alert("Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.");
+                console.error("Erreur caméra OCR :", err);
+                alert("Impossible d'accéder à la caméra.");
                 stopOcrCamera();
             }
         }
@@ -802,7 +813,7 @@
                 btn.textContent = flashOcrActive ? "💡 Flash : ON" : "💡 Flash : OFF";
                 btn.className = flashOcrActive ? "flex-1 bg-yellow-500 text-black text-xs py-1 rounded font-bold" : "flex-1 bg-gray-700 text-white text-xs py-1 rounded font-bold";
             } catch(e) {
-                alert("Le contrôle du flash n'est pas supporté par ce navigateur.");
+                alert("Le contrôle du flash n'est pas disponible sur cet appareil.");
             }
         }
 
@@ -820,7 +831,7 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            status.textContent = "Analyse du texte...";
+            status.textContent = "Analyse en cours...";
 
             try {
                 const { data: { text } } = await ocrWorker.recognize(canvas);
@@ -862,7 +873,7 @@
             document.getElementById('ocrContainer').classList.add('hidden');
         }
 
-        // --- SCANNER CAMÉRA CODE EAN ---
+        // --- SCANNER EAN ---
         async function toggleCamera() {
             const readerDiv = document.getElementById('reader');
             const btn = document.getElementById('btnToggleCam');
@@ -876,7 +887,7 @@
             stopOcrCamera();
 
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                alert("⚠️ La caméra nécessite un accès sécurisé (HTTPS).");
+                alert("⚠️ La caméra nécessite un accès HTTPS.");
                 return;
             }
 
@@ -905,7 +916,7 @@
                             attribuerArticle(articleAssocie.code);
                             stopCamera();
                         } else {
-                            alert(`Code scanné (${decodedText}) inconnu dans la base articles.`);
+                            alert(`Code scanné (${decodedText}) inconnu.`);
                         }
                     },
                     () => {}
@@ -913,33 +924,13 @@
 
                 const videoEl = document.querySelector("#reader video");
                 if (videoEl && videoEl.srcObject) {
-                    appliquerFocusCourt(videoEl.srcObject);
+                    await appliquerFocusEtZoomOptimise(videoEl.srcObject);
                 }
 
             } catch (err) {
-                console.error("Erreur démarrage caméra", err);
-                alert("Impossible d'ouvrir le scanner EAN.");
+                console.error("Erreur scanner EAN :", err);
+                alert("Impossible de démarrer la caméra.");
                 stopCamera();
-            }
-        }
-
-        async function appliquerFocusCourt(stream) {
-            try {
-                const track = stream.getVideoTracks()[0];
-                if (track && typeof track.getCapabilities === 'function') {
-                    const capabilities = track.getCapabilities();
-                    const constraints = { advanced: [] };
-
-                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-                        constraints.advanced.push({ focusMode: 'continuous' });
-                    }
-
-                    if (constraints.advanced.length > 0) {
-                        await track.applyConstraints(constraints);
-                    }
-                }
-            } catch(e) {
-                console.warn("Mise au point avancée non supportée :", e);
             }
         }
 
@@ -956,7 +947,7 @@
                 btn.textContent = flashEanActive ? "💡 Flash : ON" : "💡 Flash : OFF";
                 btn.className = flashEanActive ? "bg-yellow-500 text-black px-3 py-1.5 rounded text-xs font-bold shadow" : "bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow";
             } catch(e) {
-                alert("Le contrôle du flash n'est pas supporté par votre appareil.");
+                alert("Le contrôle du flash n'est pas supporté par votre téléphone.");
             }
         }
 

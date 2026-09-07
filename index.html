@@ -121,15 +121,16 @@
 
                 <!-- Caméra OCR -->
                 <div id="ocrContainer" class="hidden relative overflow-hidden rounded-lg border-2 border-altema-dark bg-black text-white p-2">
-                    <video id="ocrVideo" class="w-full h-48 object-cover rounded" playsinline></video>
+                    <video id="ocrVideo" onclick="declencherFocusManuel(ocrStream)" class="w-full h-48 object-cover rounded cursor-pointer" playsinline></video>
                     <canvas id="ocrCanvas" class="hidden"></canvas>
                     <div id="ocrTargetBox" class="absolute inset-0 m-auto border-2 border-dashed border-altema-yellow w-3/4 h-20 rounded pointer-events-none flex items-center justify-center">
-                        <span class="bg-black/60 text-altema-yellow text-[10px] px-2 py-0.5 rounded">Cadrer l'étiquette ici</span>
+                        <span class="bg-black/60 text-altema-yellow text-[10px] px-2 py-0.5 rounded">Toucher l'écran pour focus</span>
                     </div>
                     <div id="ocrStatus" class="mt-2 text-center text-xs text-altema-yellow font-mono">Analyse en cours...</div>
                     <div class="flex space-x-2 mt-2">
-                        <button id="btnFlashOcr" onclick="toggleFlashOcr()" class="flex-1 bg-gray-700 text-white text-xs py-1 rounded font-bold">💡 Flash : OFF</button>
-                        <button onclick="stopOcrCamera()" class="flex-1 bg-red-600 text-white text-xs py-1 rounded font-bold">Fermer</button>
+                        <button id="btnFocusOcr" onclick="declencherFocusManuel(ocrStream)" class="flex-1 bg-blue-600 text-white text-xs py-1.5 rounded font-bold">🎯 Focus</button>
+                        <button id="btnFlashOcr" onclick="toggleFlashOcr()" class="flex-1 bg-gray-700 text-white text-xs py-1.5 rounded font-bold">💡 Flash : OFF</button>
+                        <button onclick="stopOcrCamera()" class="flex-1 bg-red-600 text-white text-xs py-1.5 rounded font-bold">Fermer</button>
                     </div>
                 </div>
 
@@ -162,13 +163,15 @@
                     <button id="btnToggleCam" onclick="toggleCamera()" class="w-full bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark py-3 rounded-lg font-bold shadow flex items-center justify-center space-x-2 transition">
                         <span>🏷️ Scanner un Code EAN</span>
                     </button>
-                    <div id="cameraControls" class="hidden mt-2 flex justify-between items-center bg-gray-100 p-2 rounded-lg border border-gray-300">
-                        <button id="btnFlashEan" onclick="toggleFlashEan()" class="bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow">
+                    <div id="cameraControls" class="hidden mt-2 flex space-x-2 bg-gray-100 p-2 rounded-lg border border-gray-300">
+                        <button id="btnFocusEan" onclick="focusEanManuel()" class="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow">
+                            🎯 Ajuster le Focus
+                        </button>
+                        <button id="btnFlashEan" onclick="toggleFlashEan()" class="flex-1 bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow">
                             💡 Flash : OFF
                         </button>
-                        <span class="text-[11px] text-gray-500 italic">Mise au point auto (Macro)</span>
                     </div>
-                    <div id="reader" class="mt-2 overflow-hidden rounded-lg hidden border-2 border-altema-yellow"></div>
+                    <div id="reader" onclick="focusEanManuel()" class="mt-2 overflow-hidden rounded-lg hidden border-2 border-altema-yellow cursor-pointer"></div>
                 </div>
 
                 <div class="relative flex py-1 items-center">
@@ -261,7 +264,7 @@
             if (pwdInput === PASSWORD_SECRET) {
                 sessionStorage.setItem('altema_auth', 'true');
                 document.getElementById('section-login').classList.add('hidden');
-                errLabel.classList.remove('hidden');
+                errLabel.classList.add('hidden');
             } else {
                 errLabel.classList.remove('hidden');
             }
@@ -655,6 +658,33 @@
             }
         });
 
+        // --- GESTION DE DU FOCUS MANUEL ET CONTINU ---
+        async function declencherFocusManuel(stream) {
+            if (!stream) return;
+            const track = stream.getVideoTracks()[0];
+            if (!track) return;
+
+            try {
+                const capabilities = track.getCapabilities();
+                if (capabilities.focusMode) {
+                    // Alterner brièvement le mode de focus pour forcer la mise au point auto
+                    await track.applyConstraints({ advanced: [{ focusMode: "single-shot" }] });
+                    setTimeout(async () => {
+                        await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+                    }, 500);
+                }
+            } catch (e) {
+                console.warn("Focus manuel non pris en charge sur ce périphérique.", e);
+            }
+        }
+
+        function focusEanManuel() {
+            const videoEl = document.querySelector("#reader video");
+            if (videoEl && videoEl.srcObject) {
+                declencherFocusManuel(videoEl.srcObject);
+            }
+        }
+
         // --- SCANNER OCR POUR LES ÉTIQUETTES D'EMPLACEMENT ---
         async function toggleOcrCamera() {
             const container = document.getElementById('ocrContainer');
@@ -681,8 +711,7 @@
                     video: {
                         facingMode: { ideal: "environment" },
                         width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        focusMode: { ideal: "continuous" }
+                        height: { ideal: 1080 }
                     }
                 };
 
@@ -691,7 +720,7 @@
                 
                 video.onloadedmetadata = async () => {
                     await video.play();
-                    appliquerFocusCourt(ocrStream);
+                    declencherFocusManuel(ocrStream);
 
                     status.textContent = "Chargement OCR...";
                     if (!ocrWorker) {
@@ -719,7 +748,7 @@
                 flashOcrActive = !flashOcrActive;
                 await track.applyConstraints({ advanced: [{ torch: flashOcrActive }] });
                 btn.textContent = flashOcrActive ? "💡 Flash : ON" : "💡 Flash : OFF";
-                btn.className = flashOcrActive ? "flex-1 bg-yellow-500 text-black text-xs py-1 rounded font-bold" : "flex-1 bg-gray-700 text-white text-xs py-1 rounded font-bold";
+                btn.className = flashOcrActive ? "flex-1 bg-yellow-500 text-black text-xs py-1.5 rounded font-bold" : "flex-1 bg-gray-700 text-white text-xs py-1.5 rounded font-bold";
             } catch(e) {
                 alert("Le contrôle du flash n'est pas supporté par ce navigateur.");
             }
@@ -833,40 +862,12 @@
                     (errorMessage) => { }
                 );
 
-                // Activer la mise au point macro/courte si disponible
-                const videoEl = document.querySelector("#reader video");
-                if (videoEl && videoEl.srcObject) {
-                    appliquerFocusCourt(videoEl.srcObject);
-                }
+                focusEanManuel();
 
             } catch (err) {
                 console.error("Erreur démarrage caméra", err);
                 alert("Erreur accès caméra : Vérifiez les autorisations.");
                 stopCamera();
-            }
-        }
-
-        async function appliquerFocusCourt(stream) {
-            try {
-                const track = stream.getVideoTracks()[0];
-                const capabilities = track.getCapabilities();
-                const constraints = { advanced: [] };
-
-                // Forcer la mise au point automatique continue
-                if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-                    constraints.advanced.push({ focusMode: 'continuous' });
-                }
-
-                // Ajuster la distance focale si disponible (mode Macro)
-                if (capabilities.focusDistance) {
-                    constraints.advanced.push({ focusDistance: capabilities.focusDistance.min || 0.1 });
-                }
-
-                if (constraints.advanced.length > 0) {
-                    await track.applyConstraints(constraints);
-                }
-            } catch(e) {
-                console.warn("Mise au point avancée non supportée", e);
             }
         }
 
@@ -881,7 +882,7 @@
                 flashEanActive = !flashEanActive;
                 await track.applyConstraints({ advanced: [{ torch: flashEanActive }] });
                 btn.textContent = flashEanActive ? "💡 Flash : ON" : "💡 Flash : OFF";
-                btn.className = flashEanActive ? "bg-yellow-500 text-black px-3 py-1.5 rounded text-xs font-bold shadow" : "bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow";
+                btn.className = flashEanActive ? "flex-1 bg-yellow-500 text-black px-3 py-1.5 rounded text-xs font-bold shadow" : "flex-1 bg-altema-dark text-white px-3 py-1.5 rounded text-xs font-bold shadow";
             } catch(e) {
                 alert("Le contrôle du flash n'est pas supporté par votre appareil.");
             }

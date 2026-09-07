@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L'adressage de ALTEMA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        altema: {
+                            dark: '#222222',
+                            yellow: '#FFCC00',
+                            yellowHover: '#E6B800', 
+                            grayText: '#B0B3B8',
+                            bgLight: '#F4F4F5'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-altema-bgLight text-gray-800 font-sans antialiased min-h-screen flex flex-col relative">
+
+    <!-- ÉCRAN DE CONNEXION (MOT DE PASSE) -->
+    <div id="section-login" class="fixed inset-0 bg-altema-dark z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border-t-8 border-altema-yellow space-y-5">
+            <div class="text-center space-y-1">
+                <span class="text-4xl">🔒</span>
+                <h2 class="text-xl font-bold uppercase tracking-wider text-altema-dark">Accès Sécurisé</h2>
+                <p class="text-xs text-gray-500">Saisissez le mot de passe pour accéder à l'application.</p>
+            </div>
+
+            <form onsubmit="verifierMotDePasse(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Mot de passe :</label>
+                    <input type="password" id="inputPassword" placeholder="Entrez le mot de passe" autocomplete="current-password" class="w-full p-3 border-2 border-gray-200 rounded-lg text-sm focus:border-altema-yellow focus:outline-none">
+                    <p id="errorPassword" class="text-xs text-red-600 font-bold mt-1 hidden">Mot de passe incorrect !</p>
+                </div>
+
+                <button type="submit" class="w-full bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark py-3 rounded-lg font-bold shadow transition text-sm">
+                    Déverrouiller
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- En-tête ALTEMA -->
+    <header class="bg-altema-dark text-white p-4 shadow-md sticky top-0 z-40 flex justify-between items-center border-b-4 border-altema-yellow">
+        <div class="flex items-center space-x-2">
+            <span class="text-xl">📦</span>
+            <h1 class="text-lg font-bold tracking-wider uppercase text-altema-grayText">
+                L'adressage de <span class="text-altema-yellow font-extrabold">ALTEMA</span>
+            </h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="btnNouveau" onclick="demanderNouveauAdressage()" class="hidden bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-sm font-bold shadow transition">
+                🔄 Nouveau
+            </button>
+            <button onclick="exporterExcel()" class="bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark px-3 py-1.5 rounded text-sm font-bold shadow transition">
+                💾 Exporter Excel
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 pb-20">
+
+        <!-- Section 1: Importation -->
+        <section id="section-import" class="bg-white p-5 rounded-xl shadow-md space-y-4 border border-gray-200">
+            <div class="border-b pb-2">
+                <h2 class="font-bold text-altema-dark text-lg">1. Charger les données</h2>
+                <p class="text-xs text-gray-500">Importez vos fichiers ou téléchargez les modèles de départ.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 bg-gray-100 p-3 rounded-lg border border-gray-200">
+                <button onclick="telechargerTemplateEmplacements()" class="bg-white border border-altema-dark text-altema-dark hover:bg-altema-dark hover:text-white px-2 py-1.5 rounded text-xs font-semibold shadow-sm transition text-center">
+                    📄 Modèle Emplacements
+                </button>
+                <button onclick="telechargerTemplateArticles()" class="bg-white border border-altema-dark text-altema-dark hover:bg-altema-dark hover:text-white px-2 py-1.5 rounded text-xs font-semibold shadow-sm transition text-center">
+                    📄 Modèle Articles
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Fichier Emplacements (.xlsx, .csv)</label>
+                    <input type="file" id="fileEmplacements" accept=".xlsx, .xls, .csv" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-altema-dark hover:file:bg-gray-300"/>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Fichier Articles [Code; Désignation; EAN]</label>
+                    <input type="file" id="fileArticles" accept=".xlsx, .xls, .csv" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-altema-dark hover:file:bg-gray-300"/>
+                </div>
+                <div class="pt-2 border-t border-gray-100">
+                    <label class="block text-xs font-bold text-altema-dark mb-1">📥 Adressage existant (Optionnel)</label>
+                    <input type="file" id="fileAdressageExistant" accept=".xlsx, .xls, .csv" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-altema-dark hover:file:bg-yellow-200"/>
+                </div>
+            </div>
+
+            <button onclick="chargerFichiers()" class="w-full bg-altema-dark text-white py-3 rounded-lg font-bold shadow hover:bg-black transition text-sm">
+                Lancer l'Adressage
+            </button>
+        </section>
+
+        <!-- Section 2: Adressage -->
+        <section id="section-adressage" class="hidden space-y-4">
+            
+            <!-- Sélecteur & Recherche d'emplacement + Scanner OCR d'étiquette -->
+            <div class="bg-white p-4 rounded-xl shadow-md space-y-3 border-l-4 border-altema-yellow">
+                <div class="flex justify-between items-center">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-gray-500">Emplacement Actuel</label>
+                    <button id="btnOCR" onclick="toggleOcrCamera()" class="bg-altema-dark text-altema-yellow hover:bg-black px-2.5 py-1 rounded-lg text-xs font-bold shadow flex items-center space-x-1 transition">
+                        <span>📷 Scanner Étiquette</span>
+                    </button>
+                </div>
+
+                <!-- Caméra OCR (Lecture Texte & Chiffres) -->
+                <div id="ocrContainer" class="hidden relative overflow-hidden rounded-lg border-2 border-altema-dark bg-black text-white p-2">
+                    <video id="ocrVideo" class="w-full h-48 object-cover rounded" playsinline></video>
+                    <canvas id="ocrCanvas" class="hidden"></canvas>
+                    <div id="ocrTargetBox" class="absolute inset-0 m-auto border-2 border-dashed border-altema-yellow w-3/4 h-20 rounded pointer-events-none flex items-center justify-center">
+                        <span class="bg-black/60 text-altema-yellow text-[10px] px-2 py-0.5 rounded">Cadrer l'étiquette ici</span>
+                    </div>
+                    <div id="ocrStatus" class="mt-2 text-center text-xs text-altema-yellow font-mono">Analyse en cours...</div>
+                    <button onclick="stopOcrCamera()" class="mt-2 w-full bg-red-600 text-white text-xs py-1 rounded font-bold">Fermer</button>
+                </div>
+
+                <!-- Recherche & Sélecteur d'emplacement alphanumérique -->
+                <div class="relative space-y-1">
+                    <input type="text" id="rechercheEmplacement" placeholder="Tapez ou choisissez un emplacement..." autocomplete="off" onfocus="filtrerEmplacements(true)" oninput="filtrerEmplacements(true)" class="w-full p-3 border-2 border-gray-200 rounded-lg text-lg font-bold text-altema-dark focus:border-altema-yellow focus:outline-none">
+                    <div id="listeEmplacementsResultats" class="absolute left-0 right-0 top-full mt-1 max-h-56 overflow-y-auto border-2 border-altema-dark bg-white rounded-lg shadow-xl divide-y z-30 hidden"></div>
+                </div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <span id="infoAttribues" class="text-xs font-bold text-altema-dark">0 / 0 adressés</span>
+                    <button onclick="supprimerEmplacementActuel()" class="text-xs text-red-600 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded transition">
+                        ❌ Supprimer cet emplacement
+                    </button>
+                </div>
+
+                <!-- Liste des articles assignés à cet emplacement -->
+                <div class="pt-2 border-t border-gray-100">
+                    <span class="block text-xs font-bold text-gray-500 mb-1">Articles sur cet emplacement :</span>
+                    <div id="listeArticlesEmplacement" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        <!-- Généré en JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attribuer un article -->
+            <div class="bg-white p-4 rounded-xl shadow-md space-y-4 border border-gray-200">
+                <h2 class="font-bold text-altema-dark border-b pb-2">Ajouter un article</h2>
+
+                <!-- Scanner Caméra Code EAN -->
+                <div>
+                    <button id="btnToggleCam" onclick="toggleCamera()" class="w-full bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark py-3 rounded-lg font-bold shadow flex items-center justify-center space-x-2 transition">
+                        <span>🏷️ Scanner un Code EAN</span>
+                    </button>
+                    <div id="reader" class="mt-3 overflow-hidden rounded-lg hidden border-2 border-altema-yellow"></div>
+                </div>
+
+                <div class="relative flex py-1 items-center">
+                    <div class="flex-grow border-t border-gray-200"></div>
+                    <span class="flex-shrink mx-4 text-gray-400 text-xs uppercase font-semibold">ou saisie manuelle</span>
+                    <div class="flex-grow border-t border-gray-200"></div>
+                </div>
+
+                <!-- Barre de Recherche Article -->
+                <div class="relative space-y-1">
+                    <label class="block text-xs font-semibold text-gray-600">Recherche Article (Code / Désignation / EAN) :</label>
+                    <input type="text" id="rechercheArticle" autocomplete="off" placeholder="Tapez le code, le nom ou l'EAN..." oninput="filtrerArticles()" class="w-full p-3 border-2 border-gray-200 rounded-lg text-sm focus:border-altema-dark focus:outline-none">
+                    
+                    <div id="listeResultats" class="absolute left-0 right-0 top-full mt-1 max-h-60 overflow-y-auto border-2 border-altema-dark bg-white rounded-lg shadow-xl divide-y z-30 hidden"></div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- POPUP DE CONFIRMATION DÉPLACEMENT -->
+    <div id="modalDoublon" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl border-t-8 border-altema-yellow max-w-sm w-full p-5 space-y-4">
+            <div class="flex items-center space-x-3 text-amber-600">
+                <span class="text-3xl">⚠️</span>
+                <h3 class="font-bold text-lg text-altema-dark">Article déjà adressé !</h3>
+            </div>
+            
+            <p id="modalTexte" class="text-sm text-gray-600 leading-relaxed">
+                Cet article est déjà attribué à l'emplacement <strong id="modalAncienEmp" class="text-altema-dark font-bold">---</strong>.
+            </p>
+
+            <p class="text-xs font-semibold text-gray-500">Voulez-vous le déplacer vers l'emplacement actuel ?</p>
+
+            <div class="flex space-x-2 pt-2">
+                <button onclick="annulerDeplacement()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-bold text-xs transition">
+                    Non, Annuler
+                </button>
+                <button onclick="confirmerDeplacement()" class="flex-1 bg-altema-yellow hover:bg-altema-yellowHover text-altema-dark py-2.5 rounded-lg font-bold text-xs shadow transition">
+                    Oui, Déplacer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PASSWORD_SECRET = "HUGO LE PLUS FORT ET LE MOINS PRETENTIEUX";
+
+        let emplacements = [];
+        let articles = [];     
+        let affectations = {}; 
+        let indexEmplacementActuel = 0;
+
+        let html5QrCode = null;
+        let cameraActive = false;
+
+        let ocrStream = null;
+        let ocrInterval = null;
+        let ocrWorker = null;
+
+        let articleEnAttente = null;
+        let ancienEmplacementTrouve = null;
+
+        window.onload = function() {
+            // Vérification de la session authentifiée
+            if (sessionStorage.getItem('altema_auth') === 'true') {
+                document.getElementById('section-login').classList.add('hidden');
+            }
+
+            const savedAffectations = localStorage.getItem('altema_affectations_v2');
+            const savedEmplacements = localStorage.getItem('altema_emplacements_v2');
+            const savedArticles = localStorage.getItem('altema_articles_v2');
+
+            if (savedEmplacements && savedArticles) {
+                emplacements = JSON.parse(savedEmplacements);
+                articles = JSON.parse(savedArticles);
+                if (savedAffectations) affectations = JSON.parse(savedAffectations);
+                
+                trierEmplacementsAlphanumerique();
+                initialiserInterface();
+            }
+        };
+
+        function verifierMotDePasse(e) {
+            e.preventDefault();
+            const pwdInput = document.getElementById('inputPassword').value;
+            const errLabel = document.getElementById('errorPassword');
+
+            if (pwdInput === PASSWORD_SECRET) {
+                sessionStorage.setItem('altema_auth', 'true');
+                document.getElementById('section-login').classList.add('hidden');
+                errLabel.classList.add('hidden');
+            } else {
+                errLabel.classList.remove('hidden');
+            }
+        }
+
+        window.addEventListener('beforeunload', function() {
+            sauvegarderLocal();
+        });
+
+        function sauvegarderLocal() {
+            localStorage.setItem('altema_affectations_v2', JSON.stringify(affectations));
+            localStorage.setItem('altema_emplacements_v2', JSON.stringify(emplacements));
+            localStorage.setItem('altema_articles_v2', JSON.stringify(articles));
+        }
+
+        function trierEmplacementsAlphanumerique() {
+            emplacements.sort((a, b) => {
+                const valA = String(Object.values(a)[0] || '');
+                const valB = String(Object.values(b)[0] || '');
+                return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+        }
+
+        function demanderNouveauAdressage() {
+            if (confirm("Voulez-vous démarrer un nouvel adressage ? Cela réinitialisera les données en cours.")) {
+                localStorage.removeItem('altema_affectations_v2');
+                localStorage.removeItem('altema_emplacements_v2');
+                localStorage.removeItem('altema_articles_v2');
+                
+                emplacements = [];
+                articles = [];
+                affectations = {};
+                indexEmplacementActuel = 0;
+                
+                if (cameraActive) stopCamera();
+                stopOcrCamera();
+
+                document.getElementById('section-adressage').classList.add('hidden');
+                document.getElementById('btnNouveau').classList.add('hidden');
+                document.getElementById('section-import').classList.remove('hidden');
+
+                document.getElementById('fileEmplacements').value = '';
+                document.getElementById('fileArticles').value = '';
+                document.getElementById('fileAdressageExistant').value = '';
+            }
+        }
+
+        function telechargerTemplateEmplacements() {
+            const data = [{"Emplacement": "A-01-01"}, {"Emplacement": "A-01-02"}, {"Emplacement": "B-02-01"}];
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Emplacements");
+            XLSX.writeFile(wb, "Template_Emplacements_ALTEMA.xlsx");
+        }
+
+        function telechargerTemplateArticles() {
+            const data = [
+                {"Code": "ART001", "Designation": "Gouttière Zinc 25", "EAN": "370000000001"},
+                {"Code": "ART002", "Designation": "Plaque Acier Bacacier", "EAN": "370000000002"},
+                {"Code": "ART003", "Designation": "Chapeau de Cheminée", "EAN": "370000000003"}
+            ];
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Articles");
+            XLSX.writeFile(wb, "Template_Articles_ALTEMA.xlsx");
+        }
+
+        async function chargerFichiers() {
+            const fileEmp = document.getElementById('fileEmplacements').files[0];
+            const fileArt = document.getElementById('fileArticles').files[0];
+            const fileExisting = document.getElementById('fileAdressageExistant').files[0];
+
+            if (!fileEmp || !fileArt) {
+                alert("Veuillez au moins sélectionner le fichier Emplacements et le fichier Articles.");
+                return;
+            }
+
+            emplacements = await lireExcelSimple(fileEmp);
+            const rawArticles = await lireExcelSimple(fileArt);
+
+            trierEmplacementsAlphanumerique();
+
+            articles = rawArticles.map(row => {
+                const keys = Object.keys(row);
+                return {
+                    code: String(row[keys[0]] || '').trim(),
+                    designation: String(row[keys[1]] || '').trim(),
+                    ean: String(row[keys[2]] || '').trim()
+                };
+            }).filter(a => a.code !== '');
+
+            affectations = {};
+            emplacements.forEach(emp => {
+                const key = Object.values(emp)[0];
+                if (key) affectations[key] = [];
+            });
+
+            if (fileExisting) {
+                const rawExisting = await lireExcelSimple(fileExisting);
+                rawExisting.forEach(row => {
+                    const empKey = String(row["Emplacement"] || Object.values(row)[0] || '').trim();
+                    const codeArt = String(row["Code Article"] || Object.values(row)[1] || '').trim();
+                    if (empKey && codeArt) {
+                        if (!affectations[empKey]) affectations[empKey] = [];
+                        if (!affectations[empKey].includes(codeArt)) {
+                            affectations[empKey].push(codeArt);
+                        }
+                    }
+                });
+            }
+
+            indexEmplacementActuel = 0;
+            sauvegarderLocal();
+            initialiserInterface();
+        }
+
+        function lireExcelSimple(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.SheetNames[0];
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+                    resolve(json);
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function initialiserInterface() {
+            document.getElementById('section-import').classList.add('hidden');
+            document.getElementById('section-adressage').classList.remove('hidden');
+            document.getElementById('btnNouveau').classList.remove('hidden');
+
+            changerEmplacementParIndex(0);
+        }
+
+        function obtenirNomEmplacement(index) {
+            if (emplacements[index]) {
+                return Object.values(emplacements[index])[0];
+            }
+            return "";
+        }
+
+        function changerEmplacementParIndex(index) {
+            if (emplacements.length === 0) {
+                document.getElementById('rechercheEmplacement').value = '';
+                document.getElementById('listeArticlesEmplacement').innerHTML = '<div class="text-xs text-gray-400 italic">Aucun emplacement disponible</div>';
+                document.getElementById('infoAttribues').textContent = '0 / 0 adressés';
+                return;
+            }
+
+            if (index < 0) index = 0;
+            if (index >= emplacements.length) index = emplacements.length - 1;
+            
+            indexEmplacementActuel = index;
+            const empNom = obtenirNomEmplacement(index);
+            document.getElementById('rechercheEmplacement').value = empNom;
+            
+            mettreAJourAffichage();
+            if (cameraActive) stopCamera();
+        }
+
+        function supprimerEmplacementActuel() {
+            if (emplacements.length === 0) return;
+
+            const empNom = obtenirNomEmplacement(indexEmplacementActuel);
+            if (confirm(`Voulez-vous vraiment supprimer l'emplacement "${empNom}" de la liste ?`)) {
+                emplacements.splice(indexEmplacementActuel, 1);
+                delete affectations[empNom];
+
+                sauvegarderLocal();
+
+                if (indexEmplacementActuel >= emplacements.length) {
+                    indexEmplacementActuel = Math.max(0, emplacements.length - 1);
+                }
+
+                changerEmplacementParIndex(indexEmplacementActuel);
+            }
+        }
+
+        function filtrerEmplacements(forceShow = false) {
+            const query = document.getElementById('rechercheEmplacement').value.toLowerCase().trim();
+            const container = document.getElementById('listeEmplacementsResultats');
+
+            const listeClés = emplacements.map(e => Object.values(e)[0]).filter(Boolean);
+            const filtres = listeClés.filter(emp => emp.toLowerCase().includes(query));
+
+            container.innerHTML = '';
+
+            if (filtres.length > 0 && forceShow) {
+                container.classList.remove('hidden');
+                filtres.forEach(empKey => {
+                    const idx = listeClés.indexOf(empKey);
+                    const artsAssocies = affectations[empKey] || [];
+                    const div = document.createElement('div');
+                    div.className = "p-3 hover:bg-yellow-50 active:bg-yellow-100 cursor-pointer text-xs flex justify-between items-center transition border-b border-gray-100";
+                    div.innerHTML = `
+                        <div class="font-bold text-altema-dark text-sm">${empKey}</div>
+                        <div>
+                            ${artsAssocies.length > 0 ? `<span class="text-[10px] bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded">${artsAssocies.length} article(s)</span>` : '<span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Vide</span>'}
+                        </div>
+                    `;
+                    div.onclick = () => {
+                        changerEmplacementParIndex(idx);
+                        container.classList.add('hidden');
+                    };
+                    container.appendChild(div);
+                });
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function mettreAJourAffichage() {
+            const empActuel = obtenirNomEmplacement(indexEmplacementActuel);
+            const codesArticles = affectations[empActuel] || [];
+            
+            const listContainer = document.getElementById('listeArticlesEmplacement');
+            listContainer.innerHTML = '';
+
+            if (codesArticles.length > 0) {
+                codesArticles.forEach(code => {
+                    const artObj = articles.find(a => a.code === code);
+                    const desig = artObj ? artObj.designation : code;
+
+                    const item = document.createElement('div');
+                    item.className = "flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200 text-xs";
+                    item.innerHTML = `
+                        <div class="truncate mr-2">
+                            <span class="font-bold text-altema-dark">${code}</span>
+                            <span class="text-gray-600 block text-[11px] truncate">${desig}</span>
+                        </div>
+                        <button onclick="retirerArticleDeLEmplacement('${code}')" class="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-[10px] shadow-sm">
+                            🗑️
+                        </button>
+                    `;
+                    listContainer.appendChild(item);
+                });
+            } else {
+                listContainer.innerHTML = '<div class="text-xs text-gray-400 italic py-1">Aucun article attribué</div>';
+            }
+
+            const total = emplacements.length;
+            const remplis = Object.keys(affectations).filter(emp => (affectations[emp] || []).length > 0).length;
+            document.getElementById('infoAttribues').textContent = `${remplis} / ${total} adressés`;
+        }
+
+        function attribuerArticle(codeArticle) {
+            const empActuel = obtenirNomEmplacement(indexEmplacementActuel);
+            if (!empActuel) return;
+
+            ancienEmplacementTrouve = null;
+            for (let emp in affectations) {
+                if ((affectations[emp] || []).includes(codeArticle) && emp !== empActuel) {
+                    ancienEmplacementTrouve = emp;
+                    break;
+                }
+            }
+
+            if (ancienEmplacementTrouve) {
+                articleEnAttente = codeArticle;
+                const artObj = articles.find(a => a.code === codeArticle);
+                const desig = artObj ? artObj.designation : codeArticle;
+                
+                document.getElementById('modalAncienEmp').textContent = `${ancienEmplacementTrouve}`;
+                document.getElementById('modalTexte').innerHTML = `L'article <strong>${codeArticle} (${desig})</strong> est déjà attribué à l'emplacement <strong class="text-altema-dark font-bold">${ancienEmplacementTrouve}</strong>.`;
+                document.getElementById('modalDoublon').classList.remove('hidden');
+                return;
+            }
+
+            executerAffectation(empActuel, codeArticle);
+        }
+
+        function confirmerDeplacement() {
+            const empActuel = obtenirNomEmplacement(indexEmplacementActuel);
+            if (ancienEmplacementTrouve && affectations[ancienEmplacementTrouve]) {
+                affectations[ancienEmplacementTrouve] = affectations[ancienEmplacementTrouve].filter(c => c !== articleEnAttente);
+            }
+            executerAffectation(empActuel, articleEnAttente);
+            fermerModal();
+        }
+
+        function annulerDeplacement() {
+            fermerModal();
+        }
+
+        function fermerModal() {
+            document.getElementById('modalDoublon').classList.add('hidden');
+            articleEnAttente = null;
+            ancienEmplacementTrouve = null;
+        }
+
+        function executerAffectation(emp, codeArticle) {
+            if (!affectations[emp]) affectations[emp] = [];
+            
+            if (!affectations[emp].includes(codeArticle)) {
+                affectations[emp].push(codeArticle);
+            }
+
+            sauvegarderLocal();
+            
+            if (indexEmplacementActuel < emplacements.length - 1) {
+                changerEmplacementParIndex(indexEmplacementActuel + 1);
+            } else {
+                mettreAJourAffichage();
+            }
+            
+            document.getElementById('rechercheArticle').value = '';
+            document.getElementById('listeResultats').classList.add('hidden');
+        }
+
+        function retirerArticleDeLEmplacement(codeArticle) {
+            const empActuel = obtenirNomEmplacement(indexEmplacementActuel);
+            if (affectations[empActuel]) {
+                affectations[empActuel] = affectations[empActuel].filter(c => c !== codeArticle);
+                sauvegarderLocal();
+                mettreAJourAffichage();
+            }
+        }
+
+        function filtrerArticles() {
+            const query = document.getElementById('rechercheArticle').value.toLowerCase().trim();
+            const container = document.getElementById('listeResultats');
+            
+            if (query.length < 1) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            const filtres = articles.filter(a => 
+                a.code.toLowerCase().includes(query) || 
+                a.designation.toLowerCase().includes(query) || 
+                a.ean.toLowerCase().includes(query)
+            ).slice(0, 15);
+
+            container.innerHTML = '';
+
+            if (filtres.length > 0) {
+                container.classList.remove('hidden');
+                filtres.forEach(art => {
+                    let empOccup = null;
+                    for (let e in affectations) {
+                        if ((affectations[e] || []).includes(art.code)) { empOccup = e; break; }
+                    }
+
+                    const div = document.createElement('div');
+                    div.className = "p-3 hover:bg-yellow-50 active:bg-yellow-100 cursor-pointer text-xs flex justify-between items-center transition border-b border-gray-100";
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-bold text-altema-dark text-sm">${art.designation}</div>
+                            <div class="text-gray-500">Code: <span class="font-medium text-gray-800">${art.code}</span></div>
+                            ${empOccup ? `<span class="inline-block mt-1 text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Déjà sur ${empOccup}</span>` : ''}
+                        </div>
+                        <div class="text-right text-gray-400 text-[10px] font-mono">${art.ean ? 'EAN: ' + art.ean : ''}</div>
+                    `;
+                    div.onclick = () => attribuerArticle(art.code);
+                    container.appendChild(div);
+                });
+            } else {
+                container.classList.remove('hidden');
+                container.innerHTML = `<div class="p-3 text-xs text-gray-400 text-center">Aucun article trouvé</div>`;
+            }
+        }
+
+        document.getElementById('rechercheArticle').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const query = this.value.toLowerCase().trim();
+                const artMatch = articles.find(a => 
+                    a.code.toLowerCase() === query || 
+                    (a.ean && a.ean.toLowerCase() === query)
+                );
+                if (artMatch) {
+                    attribuerArticle(artMatch.code);
+                }
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            const searchInput = document.getElementById('rechercheArticle');
+            const searchResults = document.getElementById('listeResultats');
+            if (searchInput && searchResults && !searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+
+            const empInput = document.getElementById('rechercheEmplacement');
+            const empResults = document.getElementById('listeEmplacementsResultats');
+            if (empInput && empResults && !empInput.contains(e.target) && !empResults.contains(e.target)) {
+                empResults.classList.add('hidden');
+            }
+        });
+
+        // --- SCANNER OCR POUR LES ÉTIQUETTES D'EMPLACEMENT ---
+        async function toggleOcrCamera() {
+            const container = document.getElementById('ocrContainer');
+            if (!container.classList.contains('hidden')) {
+                stopOcrCamera();
+                return;
+            }
+
+            if (cameraActive) stopCamera();
+
+            container.classList.remove('hidden');
+            const video = document.getElementById('ocrVideo');
+            const status = document.getElementById('ocrStatus');
+
+            try {
+                status.textContent = "Initialisation de la caméra...";
+                ocrStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                video.srcObject = ocrStream;
+                await video.play();
+
+                status.textContent = "Chargement OCR...";
+                if (!ocrWorker) {
+                    ocrWorker = await Tesseract.createWorker('eng');
+                }
+
+                status.textContent = "Veuillez viser l'étiquette...";
+
+                ocrInterval = setInterval(async () => {
+                    await capturerEtAnalyserOCR();
+                }, 1500);
+
+            } catch (err) {
+                console.error(err);
+                alert("Impossible d'accéder à la caméra pour l'OCR.");
+                stopOcrCamera();
+            }
+        }
+
+        async function capturerEtAnalyserOCR() {
+            if (!ocrStream) return;
+
+            const video = document.getElementById('ocrVideo');
+            const canvas = document.getElementById('ocrCanvas');
+            const status = document.getElementById('ocrStatus');
+
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            status.textContent = "Analyse du texte...";
+
+            try {
+                const { data: { text } } = await ocrWorker.recognize(canvas);
+                const nettoyedText = text.replace(/[^A-Za-z0-9\-_]/g, '').toUpperCase();
+
+                if (nettoyedText.length > 0) {
+                    status.textContent = `Lu : "${nettoyedText}"`;
+                    
+                    const listeClés = emplacements.map(e => Object.values(e)[0]).filter(Boolean);
+                    
+                    const matchIdx = listeClés.findIndex(empKey => {
+                        const val = empKey.replace(/[^A-Za-z0-9\-_]/g, '').toUpperCase();
+                        return nettoyedText.includes(val) || val.includes(nettoyedText);
+                    });
+
+                    if (matchIdx !== -1) {
+                        changerEmplacementParIndex(matchIdx);
+                        status.textContent = `✅ Emplacement trouvé : ${listeClés[matchIdx]}`;
+                        setTimeout(() => stopOcrCamera(), 1000);
+                    }
+                }
+            } catch (e) {
+                console.error("Erreur OCR", e);
+            }
+        }
+
+        function stopOcrCamera() {
+            if (ocrInterval) clearInterval(ocrInterval);
+            if (ocrStream) {
+                ocrStream.getTracks().forEach(track => track.stop());
+                ocrStream = null;
+            }
+            document.getElementById('ocrContainer').classList.add('hidden');
+        }
+
+        // --- SCANNER CAMÉRA CODE EAN ---
+        async function toggleCamera() {
+            const readerDiv = document.getElementById('reader');
+            const btn = document.getElementById('btnToggleCam');
+
+            if (cameraActive) {
+                stopCamera();
+                return;
+            }
+
+            stopOcrCamera();
+
+            readerDiv.classList.remove('hidden');
+            btn.textContent = "🛑 Fermer la caméra";
+            cameraActive = true;
+
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    (decodedText) => {
+                        const articleAssocie = articles.find(a => a.ean === decodedText || a.code === decodedText);
+                        if (articleAssocie) {
+                            attribuerArticle(articleAssocie.code);
+                            stopCamera();
+                        } else {
+                            alert(`Code scanné (${decodedText}) inconnu dans la base articles.`);
+                        }
+                    },
+                    (errorMessage) => { }
+                );
+
+            } catch (err) {
+                console.error("Erreur caméra", err);
+                alert("Accès à la caméra refusé ou non disponible.");
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            if (html5QrCode && cameraActive) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('reader').classList.add('hidden');
+                    document.getElementById('btnToggleCam').textContent = "🏷️ Scanner un Code EAN";
+                    cameraActive = false;
+                }).catch(err => console.error(err));
+            } else {
+                document.getElementById('reader').classList.add('hidden');
+                document.getElementById('btnToggleCam').textContent = "🏷️ Scanner un Code EAN";
+                cameraActive = false;
+            }
+        }
+
+        function exporterExcel() {
+            const rows = [];
+            
+            emplacements.forEach(empObj => {
+                const empKey = Object.values(empObj)[0];
+                const codesArticles = affectations[empKey] || [];
+
+                if (codesArticles.length > 0) {
+                    codesArticles.forEach(codeArt => {
+                        const artObj = articles.find(a => a.code === codeArt);
+                        rows.push({
+                            "Emplacement": empKey,
+                            "Code Article": codeArt,
+                            "Désignation": artObj ? artObj.designation : "",
+                            "Code EAN": artObj ? artObj.ean : ""
+                        });
+                    });
+                } else {
+                    rows.push({
+                        "Emplacement": empKey,
+                        "Code Article": "",
+                        "Désignation": "",
+                        "Code EAN": ""
+                    });
+                }
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Adressage_ALTEMA");
+            
+            XLSX.writeFile(workbook, "Adressage_ALTEMA_Resultats.xlsx");
+        }
+    </script>
+</body>
+</html>

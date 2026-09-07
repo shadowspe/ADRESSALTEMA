@@ -270,13 +270,11 @@
                 initialiserInterface();
             }
 
-            // Écouteurs pour le tap-to-focus sur la vidéo OCR
             const ocrVideo = document.getElementById('ocrVideo');
             if (ocrVideo) {
                 ocrVideo.addEventListener('click', (e) => declencherTapToFocus(e, ocrStream, ocrVideo.parentElement));
             }
 
-            // Écouteurs pour le tap-to-focus sur la vidéo EAN
             const readerDiv = document.getElementById('reader');
             if (readerDiv) {
                 readerDiv.addEventListener('click', (e) => {
@@ -304,6 +302,8 @@
 
         window.addEventListener('beforeunload', function() {
             sauvegarderLocal();
+            stopOcrCamera();
+            stopCamera();
         });
 
         function sauvegarderLocal() {
@@ -331,7 +331,7 @@
                 affectations = {};
                 indexEmplacementActuel = 0;
                 
-                if (cameraActive) stopCamera();
+                stopCamera();
                 stopOcrCamera();
 
                 document.getElementById('section-adressage').classList.add('hidden');
@@ -458,7 +458,7 @@
             document.getElementById('rechercheEmplacement').value = empNom;
             
             mettreAJourAffichage();
-            if (cameraActive) stopCamera();
+            stopCamera();
         }
 
         function supprimerEmplacementActuel() {
@@ -694,7 +694,6 @@
         async function declencherTapToFocus(event, stream, container) {
             if (!stream) return;
 
-            // Indication visuelle (cercle jaune) à l'endroit du clic
             const rect = container.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
@@ -708,23 +707,18 @@
             setTimeout(() => ring.classList.add('active'), 10);
             setTimeout(() => ring.remove(), 500);
 
-            // Re-forcer l'autofocus continue
             try {
                 const track = stream.getVideoTracks()[0];
-                if (track) {
-                    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-                    if (capabilities.focusMode) {
-                        // Relance le mode focus automatique
-                        await track.applyConstraints({
-                            advanced: [{ focusMode: 'none' }]
-                        });
+                if (track && typeof track.getCapabilities === 'function') {
+                    const capabilities = track.getCapabilities();
+                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
                         await track.applyConstraints({
                             advanced: [{ focusMode: 'continuous' }]
                         });
                     }
                 }
             } catch(e) {
-                console.warn("Impossible d'appliquer le focus au clic :", e);
+                console.warn("Gestion du focus non supportée :", e);
             }
         }
 
@@ -736,7 +730,7 @@
                 return;
             }
 
-            if (cameraActive) stopCamera();
+            stopCamera();
 
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
                 alert("⚠️ L'OCR nécessite un accès sécurisé (HTTPS).");
@@ -752,10 +746,7 @@
                 
                 const constraints = {
                     video: {
-                        facingMode: { ideal: "environment" },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        focusMode: { ideal: "continuous" }
+                        facingMode: { ideal: "environment" }
                     }
                 };
 
@@ -771,6 +762,8 @@
                         ocrWorker = await Tesseract.createWorker('eng');
                     }
                     status.textContent = "Veuillez viser l'étiquette...";
+                    
+                    if (ocrInterval) clearInterval(ocrInterval);
                     ocrInterval = setInterval(async () => {
                         await capturerEtAnalyserOCR();
                     }, 1500);
@@ -778,7 +771,7 @@
 
             } catch (err) {
                 console.error("Erreur accès OCR :", err);
-                alert("Accès caméra refusé.");
+                alert("Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.");
                 stopOcrCamera();
             }
         }
@@ -840,13 +833,17 @@
         }
 
         function stopOcrCamera() {
-            if (ocrInterval) clearInterval(ocrInterval);
+            if (ocrInterval) {
+                clearInterval(ocrInterval);
+                ocrInterval = null;
+            }
             if (ocrStream) {
                 ocrStream.getTracks().forEach(track => track.stop());
                 ocrStream = null;
             }
             flashOcrActive = false;
-            document.getElementById('btnFlashOcr').textContent = "💡 Flash : OFF";
+            const btn = document.getElementById('btnFlashOcr');
+            if (btn) btn.textContent = "💡 Flash : OFF";
             document.getElementById('ocrContainer').classList.add('hidden');
         }
 
@@ -873,26 +870,19 @@
             btn.textContent = "🛑 Fermer la caméra";
             cameraActive = true;
 
-            html5QrCode = new Html5Qrcode("reader");
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
             
             const config = { 
-                fps: 20, 
-                qrbox: { width: 280, height: 180 },
-                aspectRatio: 1.0,
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true
-                }
-            };
-
-            const cameraConstraint = { 
-                facingMode: { ideal: "environment" },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                fps: 15, 
+                qrbox: { width: 250, height: 150 },
+                aspectRatio: 1.0
             };
 
             try {
                 await html5QrCode.start(
-                    cameraConstraint,
+                    { facingMode: "environment" },
                     config, 
                     (decodedText) => {
                         const articleAssocie = articles.find(a => a.ean === decodedText || a.code === decodedText);
@@ -903,10 +893,9 @@
                             alert(`Code scanné (${decodedText}) inconnu dans la base articles.`);
                         }
                     },
-                    (errorMessage) => { }
+                    () => {}
                 );
 
-                // Activer la mise au point macro/courte si disponible
                 const videoEl = document.querySelector("#reader video");
                 if (videoEl && videoEl.srcObject) {
                     appliquerFocusCourt(videoEl.srcObject);
@@ -914,7 +903,7 @@
 
             } catch (err) {
                 console.error("Erreur démarrage caméra", err);
-                alert("Erreur accès caméra : Vérifiez les autorisations.");
+                alert("Impossible d'ouvrir le scanner EAN.");
                 stopCamera();
             }
         }
@@ -922,22 +911,20 @@
         async function appliquerFocusCourt(stream) {
             try {
                 const track = stream.getVideoTracks()[0];
-                const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-                const constraints = { advanced: [] };
+                if (track && typeof track.getCapabilities === 'function') {
+                    const capabilities = track.getCapabilities();
+                    const constraints = { advanced: [] };
 
-                if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-                    constraints.advanced.push({ focusMode: 'continuous' });
-                }
+                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                        constraints.advanced.push({ focusMode: 'continuous' });
+                    }
 
-                if (capabilities.focusDistance) {
-                    constraints.advanced.push({ focusDistance: capabilities.focusDistance.min || 0.1 });
-                }
-
-                if (constraints.advanced.length > 0) {
-                    await track.applyConstraints(constraints);
+                    if (constraints.advanced.length > 0) {
+                        await track.applyConstraints(constraints);
+                    }
                 }
             } catch(e) {
-                console.warn("Mise au point avancée non supportée", e);
+                console.warn("Mise au point avancée non supportée :", e);
             }
         }
 
@@ -960,15 +947,21 @@
 
         function stopCamera() {
             flashEanActive = false;
-            document.getElementById('btnFlashEan').textContent = "💡 Flash : OFF";
+            const btnFlash = document.getElementById('btnFlashEan');
+            if (btnFlash) btnFlash.textContent = "💡 Flash : OFF";
             document.getElementById('cameraControls').classList.add('hidden');
 
             if (html5QrCode && cameraActive) {
+                cameraActive = false;
                 html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
                     document.getElementById('reader').classList.add('hidden');
                     document.getElementById('btnToggleCam').textContent = "🏷️ Scanner un Code EAN";
-                    cameraActive = false;
-                }).catch(err => console.error(err));
+                }).catch(err => {
+                    console.error(err);
+                    document.getElementById('reader').classList.add('hidden');
+                    document.getElementById('btnToggleCam').textContent = "🏷️ Scanner un Code EAN";
+                });
             } else {
                 document.getElementById('reader').classList.add('hidden');
                 document.getElementById('btnToggleCam').textContent = "🏷️ Scanner un Code EAN";
